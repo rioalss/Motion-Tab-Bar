@@ -20,10 +20,19 @@ class MotionTabBar extends StatefulWidget {
   final MotionTabBarController? controller;
   final bool labelAlwaysVisible;
 
+  // border
+  final BoxBorder? tabSelectedBorder;
+
   // badge
   final List<Widget?>? badges;
 
+  /// Ukuran lekukan kanan (kanan bawah → kanan atas). Default 10.
+  final double? notchCurveSizeRight;
+  /// Ukuran lekukan kiri (kiri atas → kiri bawah). Default 10.
+  final double? notchCurveSizeLeft;
+
   MotionTabBar({
+    this.tabSelectedBorder,
     this.textStyle,
     this.tabIconColor = Colors.black,
     this.tabIconSize = 24,
@@ -42,6 +51,8 @@ class MotionTabBar extends StatefulWidget {
     this.badges,
     this.controller,
     this.labelAlwaysVisible = false,
+    this.notchCurveSizeRight = 10,
+    this.notchCurveSizeLeft = 10,
   })  : assert(labels.contains(initialSelectedTab)),
         assert((icons != null && icons.length == labels.length) ||
             (iconWidgets != null && iconWidgets.length == labels.length)),
@@ -232,7 +243,13 @@ class _MotionTabBarState extends State<MotionTabBar> with TickerProviderStateMix
                         SizedBox(
                           height: widget.tabSize! + 15,
                           width: widget.tabSize! + 35,
-                          child: CustomPaint(painter: HalfPainter(color: widget.tabBarColor)),
+                          child: CustomPaint(
+                            painter: HalfPainter(
+                              color: widget.tabBarColor,
+                              curveSizeRight: widget.notchCurveSizeRight ?? 10,
+                              curveSizeLeft: widget.notchCurveSizeLeft ?? 10,
+                            ),
+                          ),
                         ),
                         SizedBox(
                           height: widget.tabSize,
@@ -241,6 +258,7 @@ class _MotionTabBarState extends State<MotionTabBar> with TickerProviderStateMix
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: widget.tabSelectedColor,
+                              border: widget.tabSelectedBorder,
                             ),
                             child: Padding(
                               padding: const EdgeInsets.all(0.0),
@@ -333,35 +351,28 @@ class HalfClipper extends CustomClipper<Rect> {
 
 class HalfPainter extends CustomPainter {
   final Color? color;
-  HalfPainter({this.color});
+  final double curveSizeRight;
+  final double curveSizeLeft;
+
+  HalfPainter({
+    this.color,
+    this.curveSizeRight = 10,
+    this.curveSizeLeft = 10,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
-    // final Rect beforeRect = Rect.fromLTWH(0, (size.height / 2) - 10, 10, 10);
-    // final Rect largeRect = Rect.fromLTWH(10, 0, size.width - 20, 70);
-    // final Rect afterRect = Rect.fromLTWH(size.width - 10, (size.height / 2) - 10, 10, 10);
-
-    // final path = Path();
-
-    // path.arcTo(beforeRect, vector.radians(0), vector.radians(90), false);
-    // path.lineTo(20, size.height / 2);
-    // path.arcTo(largeRect, vector.radians(0), -vector.radians(180), false);
-    // path.moveTo(size.width - 10, size.height / 2);
-    // path.lineTo(size.width - 10, (size.height / 2) - 10);
-    // path.arcTo(afterRect, vector.radians(180), vector.radians(-90), false);
-
-    final double curveSize = 10;
     final double xStartingPos = 0;
     final double yStartingPos = (size.height / 2);
-    final double yMaxPos = yStartingPos - curveSize;
+    final double yMaxPos = yStartingPos - (curveSizeRight > curveSizeLeft ? curveSizeRight : curveSizeLeft);
 
     final path = Path();
 
     path.moveTo(xStartingPos, yStartingPos);
     path.lineTo(size.width - xStartingPos, yStartingPos);
-    path.quadraticBezierTo(size.width - (curveSize), yStartingPos, size.width - (curveSize + 5), yMaxPos);
-    path.lineTo(xStartingPos + (curveSize + 5), yMaxPos);
-    path.quadraticBezierTo(xStartingPos + (curveSize), yStartingPos, xStartingPos, yStartingPos);
+    path.quadraticBezierTo(size.width - curveSizeRight, yStartingPos, size.width - (curveSizeRight + 5), yMaxPos);
+    path.lineTo(xStartingPos + (curveSizeLeft + 5), yMaxPos);
+    path.quadraticBezierTo(xStartingPos + curveSizeLeft, yStartingPos, xStartingPos, yStartingPos);
 
     path.close();
 
@@ -369,5 +380,8 @@ class HalfPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(CustomPainter oldDelegate) => true;
+  bool shouldRepaint(HalfPainter oldDelegate) =>
+      oldDelegate.curveSizeRight != curveSizeRight ||
+      oldDelegate.curveSizeLeft != curveSizeLeft ||
+      oldDelegate.color != color;
 }

@@ -212,6 +212,7 @@ class _MotionTabBarState extends State<MotionTabBar> with TickerProviderStateMix
                   child: FractionallySizedBox(
                     widthFactor: 1 / tabAmount,
                     child: Stack(
+                      clipBehavior: Clip.none,
                       alignment: Alignment.center,
                       children: <Widget>[
                         SizedBox(
@@ -240,8 +241,8 @@ class _MotionTabBarState extends State<MotionTabBar> with TickerProviderStateMix
                           ),
                         ),
                         SizedBox(
-                          height: widget.tabSize! + 15,
-                          width: widget.tabSize! + 35,
+                          height: widget.tabSize! + 20,
+                          width: widget.tabSize! + 45 + (widget.notchSmoothness ?? 10),
                           child: CustomPaint(
                             painter: HalfPainter(
                               color: widget.tabBarColor,
@@ -358,35 +359,37 @@ class HalfPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // smoothness: 1 = lekukan dalam, 100 = hampir rata (sangat smooth)
     final double s = smoothness.clamp(1.0, 100.0);
     final double t = s / 100.0; // normalized 0.01 – 1.0
 
     final double w = size.width;
     final double h = size.height;
-    final double cx = w / 2;
+    final double mid = w / 2;
     final double yBase = h / 2;
 
-    // Depth (kedalaman lekukan): semakin besar smoothness → depth semakin kecil
+    // Depth: semakin besar smoothness → depth semakin kecil → lekukan makin dangkal
     final double maxDepth = h * 0.48;
-    final double depth = maxDepth * (1.0 - t * 0.95); // tidak pernah 0 total
+    final double depth = maxDepth * (1.0 - t * 0.95);
     final double yTop = yBase - depth;
 
     final path = Path();
     path.moveTo(0, yBase);
 
-    // Cubic bezier: cp1.y = yBase → tangent horizontal di tepi (nyambung mulus ke tabbar)
-    //               cp2.y = yTop  → tangent horizontal di puncak (smooth di atas)
-    // Tidak ada garis lurus → tidak ada sudut tajam sama sekali.
+    // Kurva kiri: (0, yBase) → (mid, yTop)
+    // cp1 dekat start (y=yBase) → tangent horizontal di tepi tabbar
+    // cp2 dekat end (y=yTop) → tangent horizontal di puncak
+    // KUNCI: cp1.x < cp2.x (TIDAK crossing) → kurva smooth tanpa lipatan
     path.cubicTo(
-      cx * 0.66, yBase, // cp1: horizontal tangent di base
-      cx * 0.34, yTop,  // cp2: horizontal tangent di puncak
-      cx, yTop,          // end: puncak tengah
+      mid * 0.35, yBase,  // cp1: dekat tepi, level tabbar
+      mid * 0.65, yTop,   // cp2: dekat puncak, level atas
+      mid, yTop,           // end: puncak tengah
     );
+
+    // Kurva kanan: (mid, yTop) → (w, yBase) — mirror
     path.cubicTo(
-      w - cx * 0.34, yTop,  // cp1: mirror — horizontal tangent di puncak
-      w - cx * 0.66, yBase, // cp2: mirror — horizontal tangent di base
-      w, yBase,               // end: tepi kanan
+      mid + mid * 0.35, yTop,   // cp1: dekat puncak
+      mid + mid * 0.65, yBase,  // cp2: dekat tepi
+      w, yBase,                  // end: tepi kanan
     );
 
     path.close();

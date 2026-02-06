@@ -356,35 +356,40 @@ class HalfPainter extends CustomPainter {
     this.smoothness = 10,
   });
 
-  /// Semakin besar smoothness = depth kecil = lekukan halus/lebar (smooth).
-  /// Semakin kecil smoothness = depth besar = lekukan dalam.
-  static const double _smoothnessToDepthFactor = 100;
-
-  double _effectiveDepth() {
-    final double s = smoothness.clamp(1.0, 100.0);
-    return (_smoothnessToDepthFactor / s).clamp(2.0, 50.0);
-  }
-
   @override
   void paint(Canvas canvas, Size size) {
-    final double depth = _effectiveDepth();
-    final double spread = depth + 10;
-    final double xStartingPos = 0;
-    final double yStartingPos = (size.height / 2);
-    final double yMaxPos = yStartingPos - depth;
-    // Control point di tengah arc agar kurva lebar dan smooth (seperti referensi)
-    final double ctrlY = (yStartingPos + yMaxPos) * 0.5;
+    // smoothness: 1 = lekukan dalam, 100 = hampir rata (sangat smooth)
+    final double s = smoothness.clamp(1.0, 100.0);
+    final double t = s / 100.0; // normalized 0.01 – 1.0
+
+    final double w = size.width;
+    final double h = size.height;
+    final double cx = w / 2;
+    final double yBase = h / 2;
+
+    // Depth (kedalaman lekukan): semakin besar smoothness → depth semakin kecil
+    final double maxDepth = h * 0.48;
+    final double depth = maxDepth * (1.0 - t * 0.95); // tidak pernah 0 total
+    final double yTop = yBase - depth;
 
     final path = Path();
+    path.moveTo(0, yBase);
 
-    path.moveTo(xStartingPos, yStartingPos);
-    path.lineTo(size.width - xStartingPos, yStartingPos);
-    path.quadraticBezierTo(size.width - spread * 0.5, ctrlY, size.width - spread, yMaxPos);
-    path.lineTo(xStartingPos + spread, yMaxPos);
-    path.quadraticBezierTo(xStartingPos + spread * 0.5, ctrlY, xStartingPos, yStartingPos);
+    // Cubic bezier: cp1.y = yBase → tangent horizontal di tepi (nyambung mulus ke tabbar)
+    //               cp2.y = yTop  → tangent horizontal di puncak (smooth di atas)
+    // Tidak ada garis lurus → tidak ada sudut tajam sama sekali.
+    path.cubicTo(
+      cx * 0.66, yBase, // cp1: horizontal tangent di base
+      cx * 0.34, yTop,  // cp2: horizontal tangent di puncak
+      cx, yTop,          // end: puncak tengah
+    );
+    path.cubicTo(
+      w - cx * 0.34, yTop,  // cp1: mirror — horizontal tangent di puncak
+      w - cx * 0.66, yBase, // cp2: mirror — horizontal tangent di base
+      w, yBase,               // end: tepi kanan
+    );
 
     path.close();
-
     canvas.drawPath(path, Paint()..color = color ?? Colors.white);
   }
 

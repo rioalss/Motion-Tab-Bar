@@ -242,11 +242,12 @@ class _MotionTabBarState extends State<MotionTabBar> with TickerProviderStateMix
                         ),
                         SizedBox(
                           height: widget.tabSize! + 20,
-                          width: widget.tabSize! + 45 + (widget.notchSmoothness ?? 10),
+                          width: widget.tabSize! + 60 + (widget.notchSmoothness ?? 10),
                           child: CustomPaint(
                             painter: HalfPainter(
                               color: widget.tabBarColor,
                               smoothness: widget.notchSmoothness ?? 10,
+                              tabSize: widget.tabSize ?? 60,
                             ),
                           ),
                         ),
@@ -351,45 +352,63 @@ class HalfClipper extends CustomClipper<Rect> {
 class HalfPainter extends CustomPainter {
   final Color? color;
   final double smoothness;
+  final double tabSize;
 
   HalfPainter({
     this.color,
     this.smoothness = 10,
+    this.tabSize = 60,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     final double s = smoothness.clamp(1.0, 100.0);
-    final double t = s / 100.0; // normalized 0.01 – 1.0
+    final double t = s / 100.0; // 0.01 – 1.0
 
     final double w = size.width;
     final double h = size.height;
     final double mid = w / 2;
     final double yBase = h / 2;
 
-    // Depth: semakin besar smoothness → depth semakin kecil → lekukan makin dangkal
-    final double maxDepth = h * 0.48;
-    final double depth = maxDepth * (1.0 - t * 0.95);
+    // Radius lingkaran (HalfClipper circle = tabSize + 10)
+    final double circleRadius = (tabSize + 10) / 2;
+
+    // Margin di luar lingkaran — makin besar smoothness, makin lebar
+    final double margin = 5 + t * 15;
+
+    // Depth (kedalaman notch dari yBase ke atas)
+    // Smoothness besar → depth kecil → lekukan dangkal
+    final double maxDepth = circleRadius;
+    final double depth = maxDepth * (1.0 - t * 0.85);
     final double yTop = yBase - depth;
+
+    // Batas flat top — harus LEBIH LEBAR dari lingkaran di semua ketinggian
+    final double flatHalf = circleRadius + margin;
+    final double flatLeft = mid - flatHalf;
+    final double flatRight = mid + flatHalf;
 
     final path = Path();
     path.moveTo(0, yBase);
 
-    // Kurva kiri: (0, yBase) → (mid, yTop)
-    // cp1 dekat start (y=yBase) → tangent horizontal di tepi tabbar
-    // cp2 dekat end (y=yTop) → tangent horizontal di puncak
-    // KUNCI: cp1.x < cp2.x (TIDAK crossing) → kurva smooth tanpa lipatan
+    // ── Kurva kiri: (0, yBase) → (flatLeft, yTop) ──
+    // cp1.y = yBase → tangent horizontal di tepi (menyatu mulus ke tabbar)
+    // cp2.y = yTop  → tangent horizontal di atas (menyatu mulus ke flat top)
     path.cubicTo(
-      mid * 0.35, yBase,  // cp1: dekat tepi, level tabbar
-      mid * 0.65, yTop,   // cp2: dekat puncak, level atas
-      mid, yTop,           // end: puncak tengah
+      flatLeft * 0.55, yBase,   // cp1
+      flatLeft * 0.85, yTop,    // cp2
+      flatLeft, yTop,            // end → awal flat top
     );
 
-    // Kurva kanan: (mid, yTop) → (w, yBase) — mirror
+    // ── Flat top: garis horizontal di yTop ──
+    // Lebih lebar dari lingkaran → notch menyelimuti circle sepenuhnya
+    path.lineTo(flatRight, yTop);
+
+    // ── Kurva kanan: (flatRight, yTop) → (w, yBase) — mirror ──
+    final double rw = w - flatRight;
     path.cubicTo(
-      mid + mid * 0.35, yTop,   // cp1: dekat puncak
-      mid + mid * 0.65, yBase,  // cp2: dekat tepi
-      w, yBase,                  // end: tepi kanan
+      flatRight + rw * 0.15, yTop,   // cp1: mirror dari cp2 kiri
+      flatRight + rw * 0.45, yBase,  // cp2: mirror dari cp1 kiri
+      w, yBase,                       // end → tepi kanan
     );
 
     path.close();
@@ -398,5 +417,7 @@ class HalfPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(HalfPainter oldDelegate) =>
-      oldDelegate.smoothness != smoothness || oldDelegate.color != color;
+      oldDelegate.smoothness != smoothness ||
+      oldDelegate.tabSize != tabSize ||
+      oldDelegate.color != color;
 }

@@ -243,7 +243,7 @@ class _MotionTabBarState extends State<MotionTabBar> with TickerProviderStateMix
                         ),
                         SizedBox(
                           height: widget.tabSize! + 20,
-                          width: widget.tabSize! + 55 + (widget.notchSmoothness ?? 10),
+                          width: widget.tabSize! + 55 + (widget.notchSmoothness ?? 10) * 3,
                           child: CustomPaint(
                             painter: HalfPainter(
                               color: widget.tabBarColor,
@@ -381,8 +381,9 @@ class HalfPainter extends CustomPainter {
     // Center notch circle (di bawah yBase, sehingga notch menonjol ke atas)
     final double cy = yBase + (r - depth);
 
-    // ── Arc points: sedikit di atas yBase untuk ruang transisi ──
-    final double arcMargin = 3 + t * 4;
+    // ── Arc points: di atas yBase untuk ruang transisi ──
+    // Semakin besar smoothness → arcMargin besar → transisi lebih gradual
+    final double arcMargin = 5 + smoothness * 0.5;
     final double arcPointY = yBase - arcMargin;
     final double dd = cy - arcPointY;
 
@@ -408,7 +409,8 @@ class HalfPainter extends CustomPainter {
     final double ctrlRX = arcRX + tangentOff;
 
     // Lebar area transisi di flat bar
-    final double ts = 12 + t * 20;
+    // Semakin besar smoothness → ts besar → kurva kiri/kanan makin smooth & lebar
+    final double ts = 15 + smoothness * 1.5;
     final double barLX = (ctrlLX - ts).clamp(0.0, mid);
     final double barRX = (ctrlRX + ts).clamp(mid, w);
 

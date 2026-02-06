@@ -1,5 +1,6 @@
 library motiontabbar;
 
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:motion_tab_bar_v2/motion-tab-controller.dart';
 import 'motion-tab-item.dart';
@@ -242,7 +243,7 @@ class _MotionTabBarState extends State<MotionTabBar> with TickerProviderStateMix
                         ),
                         SizedBox(
                           height: widget.tabSize! + 20,
-                          width: widget.tabSize! + 60 + (widget.notchSmoothness ?? 10),
+                          width: widget.tabSize! + 55 + (widget.notchSmoothness ?? 10),
                           child: CustomPaint(
                             painter: HalfPainter(
                               color: widget.tabBarColor,
@@ -363,55 +364,81 @@ class HalfPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final double s = smoothness.clamp(1.0, 100.0);
-    final double t = s / 100.0; // 0.01 – 1.0
+    final double t = s / 100.0;
 
     final double w = size.width;
     final double h = size.height;
     final double mid = w / 2;
     final double yBase = h / 2;
 
-    // Radius lingkaran (HalfClipper circle = tabSize + 10)
-    final double circleRadius = (tabSize + 10) / 2;
+    // ── Notch circle: sedikit lebih besar dari icon circle ──
+    final double notchGap = 4 + t * 2;
+    final double r = (tabSize + 10) / 2 + notchGap;
 
-    // Margin di luar lingkaran — makin besar smoothness, makin lebar
-    final double margin = 5 + t * 15;
+    // ── Depth: smoothness besar → notch dangkal ──
+    final double depth = r * (1.0 - t * 0.85);
 
-    // Depth (kedalaman notch dari yBase ke atas)
-    // Smoothness besar → depth kecil → lekukan dangkal
-    final double maxDepth = circleRadius;
-    final double depth = maxDepth * (1.0 - t * 0.85);
-    final double yTop = yBase - depth;
+    // Center notch circle (di bawah yBase, sehingga notch menonjol ke atas)
+    final double cy = yBase + (r - depth);
 
-    // Batas flat top — harus LEBIH LEBAR dari lingkaran di semua ketinggian
-    final double flatHalf = circleRadius + margin;
-    final double flatLeft = mid - flatHalf;
-    final double flatRight = mid + flatHalf;
+    // ── Arc points: sedikit di atas yBase untuk ruang transisi ──
+    final double arcMargin = 3 + t * 4;
+    final double arcPointY = yBase - arcMargin;
+    final double dd = cy - arcPointY;
 
+    // Jika notch circle tidak sampai ketinggian ini → tidak ada notch
+    if (dd >= r) {
+      canvas.drawRect(
+        Rect.fromLTRB(0, yBase, w, h),
+        Paint()..color = color ?? Colors.white,
+      );
+      return;
+    }
+
+    // Horizontal offset arc points dari center
+    final double arcDx = math.sqrt(r * r - dd * dd);
+    final double arcLX = mid - arcDx;
+    final double arcRX = mid + arcDx;
+
+    // ── Quadratic bezier control points ──
+    // Dihitung dari perpotongan garis singgung lingkaran di arc point dengan y=yBase.
+    // Ini menjamin tangent bezier = tangent arc → transisi C1 smooth.
+    final double tangentOff = dd * arcMargin / arcDx;
+    final double ctrlLX = arcLX - tangentOff;
+    final double ctrlRX = arcRX + tangentOff;
+
+    // Lebar area transisi di flat bar
+    final double ts = 12 + t * 20;
+    final double barLX = (ctrlLX - ts).clamp(0.0, mid);
+    final double barRX = (ctrlRX + ts).clamp(mid, w);
+
+    // ── Arc angles (Flutter: 0=kanan, positif=CW) ──
+    final double startAngle = math.atan2(arcPointY - cy, arcLX - mid);
+    final double endAngle = math.atan2(arcPointY - cy, arcRX - mid);
+    double sweepAngle = endAngle - startAngle;
+    if (sweepAngle <= 0) sweepAngle += 2 * math.pi;
+
+    final Rect arcRect = Rect.fromCircle(center: Offset(mid, cy), radius: r);
+
+    // ── Build path ──
     final path = Path();
     path.moveTo(0, yBase);
+    path.lineTo(barLX, yBase);
 
-    // ── Kurva kiri: (0, yBase) → (flatLeft, yTop) ──
-    // cp1.y = yBase → tangent horizontal di tepi (menyatu mulus ke tabbar)
-    // cp2.y = yTop  → tangent horizontal di atas (menyatu mulus ke flat top)
-    path.cubicTo(
-      flatLeft * 0.55, yBase,   // cp1
-      flatLeft * 0.85, yTop,    // cp2
-      flatLeft, yTop,            // end → awal flat top
-    );
+    // Transisi kiri: quadratic bezier (flat bar → arc)
+    // tangent di barLX: horizontal ✓
+    // tangent di arcLX: sejajar singgung lingkaran ✓
+    path.quadraticBezierTo(ctrlLX, yBase, arcLX, arcPointY);
 
-    // ── Flat top: garis horizontal di yTop ──
-    // Lebih lebar dari lingkaran → notch menyelimuti circle sepenuhnya
-    path.lineTo(flatRight, yTop);
+    // Arc utama: mengikuti lingkaran melewati puncak (atas)
+    path.arcTo(arcRect, startAngle, sweepAngle, false);
 
-    // ── Kurva kanan: (flatRight, yTop) → (w, yBase) — mirror ──
-    final double rw = w - flatRight;
-    path.cubicTo(
-      flatRight + rw * 0.15, yTop,   // cp1: mirror dari cp2 kiri
-      flatRight + rw * 0.45, yBase,  // cp2: mirror dari cp1 kiri
-      w, yBase,                       // end → tepi kanan
-    );
+    // Transisi kanan: quadratic bezier (arc → flat bar)
+    path.quadraticBezierTo(ctrlRX, yBase, barRX, yBase);
 
+    path.lineTo(w, yBase);
     path.close();
+
     canvas.drawPath(path, Paint()..color = color ?? Colors.white);
   }
 

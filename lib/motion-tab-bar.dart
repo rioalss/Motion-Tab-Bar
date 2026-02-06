@@ -26,12 +26,10 @@ class MotionTabBar extends StatefulWidget {
   // badge
   final List<Widget?>? badges;
 
-  /// Smoothness lekukan kanan: nilai lebih besar = lekukan lebih halus (smooth),
-  /// nilai lebih kecil = lekukan lebih dalam. Default 10.
-  final double? notchCurveSizeRight;
-  /// Smoothness lekukan kiri: nilai lebih besar = lekukan lebih halus (smooth),
-  /// nilai lebih kecil = lekukan lebih dalam. Default 10.
-  final double? notchCurveSizeLeft;
+  /// Smoothness notch: semakin besar angka = lekukan hampir tidak ada, transisi
+  /// dengan tab bar semakin smooth (seperti area hitam yang menyelimuti circle).
+  /// Semakin kecil = lekukan semakin dalam. Default 10.
+  final double? notchSmoothness;
 
   MotionTabBar({
     this.tabSelectedBorder,
@@ -53,8 +51,7 @@ class MotionTabBar extends StatefulWidget {
     this.badges,
     this.controller,
     this.labelAlwaysVisible = false,
-    this.notchCurveSizeRight = 10,
-    this.notchCurveSizeLeft = 10,
+    this.notchSmoothness = 10,
   })  : assert(labels.contains(initialSelectedTab)),
         assert((icons != null && icons.length == labels.length) ||
             (iconWidgets != null && iconWidgets.length == labels.length)),
@@ -248,8 +245,7 @@ class _MotionTabBarState extends State<MotionTabBar> with TickerProviderStateMix
                           child: CustomPaint(
                             painter: HalfPainter(
                               color: widget.tabBarColor,
-                              curveSizeRight: widget.notchCurveSizeRight ?? 10,
-                              curveSizeLeft: widget.notchCurveSizeLeft ?? 10,
+                              smoothness: widget.notchSmoothness ?? 10,
                             ),
                           ),
                         ),
@@ -353,39 +349,39 @@ class HalfClipper extends CustomClipper<Rect> {
 
 class HalfPainter extends CustomPainter {
   final Color? color;
-  final double curveSizeRight;
-  final double curveSizeLeft;
+  final double smoothness;
 
   HalfPainter({
     this.color,
-    this.curveSizeRight = 10,
-    this.curveSizeLeft = 10,
+    this.smoothness = 10,
   });
 
-  /// Nilai besar = smooth (lekukan halus), nilai kecil = lekukan dalam.
-  /// Dikonversi ke "depth" efektif: depth = 100 / smoothness (default 10 → depth 10).
+  /// Semakin besar smoothness = depth kecil = lekukan halus/lebar (smooth).
+  /// Semakin kecil smoothness = depth besar = lekukan dalam.
   static const double _smoothnessToDepthFactor = 100;
 
-  double _effectiveDepth(double smoothness) {
+  double _effectiveDepth() {
     final double s = smoothness.clamp(1.0, 100.0);
     return (_smoothnessToDepthFactor / s).clamp(2.0, 50.0);
   }
 
   @override
   void paint(Canvas canvas, Size size) {
-    final double depthRight = _effectiveDepth(curveSizeRight);
-    final double depthLeft = _effectiveDepth(curveSizeLeft);
+    final double depth = _effectiveDepth();
+    final double spread = depth + 10;
     final double xStartingPos = 0;
     final double yStartingPos = (size.height / 2);
-    final double yMaxPos = yStartingPos - (depthRight > depthLeft ? depthRight : depthLeft);
+    final double yMaxPos = yStartingPos - depth;
+    // Control point di tengah arc agar kurva lebar dan smooth (seperti referensi)
+    final double ctrlY = (yStartingPos + yMaxPos) * 0.5;
 
     final path = Path();
 
     path.moveTo(xStartingPos, yStartingPos);
     path.lineTo(size.width - xStartingPos, yStartingPos);
-    path.quadraticBezierTo(size.width - depthRight, yStartingPos, size.width - (depthRight + 5), yMaxPos);
-    path.lineTo(xStartingPos + (depthLeft + 5), yMaxPos);
-    path.quadraticBezierTo(xStartingPos + depthLeft, yStartingPos, xStartingPos, yStartingPos);
+    path.quadraticBezierTo(size.width - spread * 0.5, ctrlY, size.width - spread, yMaxPos);
+    path.lineTo(xStartingPos + spread, yMaxPos);
+    path.quadraticBezierTo(xStartingPos + spread * 0.5, ctrlY, xStartingPos, yStartingPos);
 
     path.close();
 
@@ -394,7 +390,5 @@ class HalfPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(HalfPainter oldDelegate) =>
-      oldDelegate.curveSizeRight != curveSizeRight ||
-      oldDelegate.curveSizeLeft != curveSizeLeft ||
-      oldDelegate.color != color;
+      oldDelegate.smoothness != smoothness || oldDelegate.color != color;
 }

@@ -26,9 +26,11 @@ class MotionTabBar extends StatefulWidget {
   // badge
   final List<Widget?>? badges;
 
-  /// Ukuran lekukan kanan (kanan bawah → kanan atas). Default 10.
+  /// Smoothness lekukan kanan: nilai lebih besar = lekukan lebih halus (smooth),
+  /// nilai lebih kecil = lekukan lebih dalam. Default 10.
   final double? notchCurveSizeRight;
-  /// Ukuran lekukan kiri (kiri atas → kiri bawah). Default 10.
+  /// Smoothness lekukan kiri: nilai lebih besar = lekukan lebih halus (smooth),
+  /// nilai lebih kecil = lekukan lebih dalam. Default 10.
   final double? notchCurveSizeLeft;
 
   MotionTabBar({
@@ -360,19 +362,30 @@ class HalfPainter extends CustomPainter {
     this.curveSizeLeft = 10,
   });
 
+  /// Nilai besar = smooth (lekukan halus), nilai kecil = lekukan dalam.
+  /// Dikonversi ke "depth" efektif: depth = 100 / smoothness (default 10 → depth 10).
+  static const double _smoothnessToDepthFactor = 100;
+
+  double _effectiveDepth(double smoothness) {
+    final double s = smoothness.clamp(1.0, 100.0);
+    return (_smoothnessToDepthFactor / s).clamp(2.0, 50.0);
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
+    final double depthRight = _effectiveDepth(curveSizeRight);
+    final double depthLeft = _effectiveDepth(curveSizeLeft);
     final double xStartingPos = 0;
     final double yStartingPos = (size.height / 2);
-    final double yMaxPos = yStartingPos - (curveSizeRight > curveSizeLeft ? curveSizeRight : curveSizeLeft);
+    final double yMaxPos = yStartingPos - (depthRight > depthLeft ? depthRight : depthLeft);
 
     final path = Path();
 
     path.moveTo(xStartingPos, yStartingPos);
     path.lineTo(size.width - xStartingPos, yStartingPos);
-    path.quadraticBezierTo(size.width - curveSizeRight, yStartingPos, size.width - (curveSizeRight + 5), yMaxPos);
-    path.lineTo(xStartingPos + (curveSizeLeft + 5), yMaxPos);
-    path.quadraticBezierTo(xStartingPos + curveSizeLeft, yStartingPos, xStartingPos, yStartingPos);
+    path.quadraticBezierTo(size.width - depthRight, yStartingPos, size.width - (depthRight + 5), yMaxPos);
+    path.lineTo(xStartingPos + (depthLeft + 5), yMaxPos);
+    path.quadraticBezierTo(xStartingPos + depthLeft, yStartingPos, xStartingPos, yStartingPos);
 
     path.close();
 
